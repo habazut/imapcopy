@@ -53,14 +53,19 @@ class IMAP_Copy(object):
         auth = getattr(self, target + "_auth")
 
         self.logger.info("Connect to %s (%s)" % (target, data['host']))
-        if data['port'] == 993:
+        if data['host'].startswith("/"):
+            connection = imaplib.IMAP4_stream(data['host'])
+        elif data['port'] == 993:
             connection = imaplib.IMAP4_SSL(data['host'], data['port'])
         else:
             connection = imaplib.IMAP4(data['host'], data['port'])
 
         if len(auth) > 0:
-            self.logger.info("Authenticate at %s" % target)
-            connection.login(*auth)
+            if data['host'].startswith("/"):
+                self.logger.info("Preauthenticated at %s" % target)
+            else:
+                self.logger.info("Authenticate at %s" % target)
+                connection.login(*auth)
 
         setattr(self, '_conn_%s' % target, connection)
         self.logger.info("%s connection established" % target)
