@@ -1,0 +1,18 @@
+#!/bin/bash
+# imapcopy uses python imaplib
+# imaplib is picky of the input it gets, will bail out at
+# slightest error. So we do use the awk to not show any
+# preamble to imapli so that we do not need to modify
+# imtest more. If you have another imtest version that
+# says something else but "PREAUTH imtest proxy' as last
+# line before ready, adjust the awk
+PATH=/usr/lib/cyrus/bin:$PATH
+# find first imtest in path above
+IMTEST=`type -ap imtest | grep -v $0 | egrep '^/' | tail -1`
+$IMTEST -m GSSAPI -s "$@" 2>/dev/null | awk '
+   /PREAUTH imtest proxy/ {GO=1}
+   GO {print ; system("")}
+'
+RET=$?
+
+exit $RET
