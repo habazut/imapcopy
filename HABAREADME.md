@@ -2,13 +2,13 @@
 How to call imapcopy.py
 -----------------------
 
-Argument order is:
-Source SourceUSER+PASS
-Dest   DestUSER+PASS
-Sourcebox1
-Destbox1
-Sourcebox2
-Destbox2
+Argument order is:`
+ Source SourceUSER+PASS
+ Dest   DestUSER+PASS
+ Sourcebox1
+ Destbox1
+ Sourcebox2
+ Destbox2`
 
 imap-proxy-for-imaplib calls imtest
 
