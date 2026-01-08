@@ -14,7 +14,8 @@ import hashlib
 import imaplib
 import logging
 import argparse
-
+import re
+from datetime import datetime
 
 class IMAP_Copy(object):
     source = {
@@ -31,7 +32,7 @@ class IMAP_Copy(object):
 
     def __init__(self, source_server, destination_server, folder_mapping,
                  source_auth=(), destination_auth=(), create_folders=False,
-                 recurse=False, skip=0, limit=0):
+                 recurse=False, skip=0, limit=0, datesub=None):
 
         self.logger = logging.getLogger("IMAP_Copy")
 
@@ -47,6 +48,7 @@ class IMAP_Copy(object):
         self.limit = limit
 
         self.recurse = recurse
+        self.datesub = datesub
 
     def _connect(self, target):
         data = getattr(self, target)
@@ -99,7 +101,10 @@ class IMAP_Copy(object):
             self.logger.info("Close folder on %s" % target)
 
         self.logger.info("Disconnect from %s server" % target)
-        connection.logout()
+        try:
+            connection.logout()
+        except Exception as e:
+            self.logger.error("Logout error: %s" % str(e))
         delattr(self, '_conn_%s' % target)
 
     def disconnect(self):
@@ -125,12 +130,12 @@ class IMAP_Copy(object):
             self.logger.error("Couldn't open destination folder %s" %
                               destination_folder)
             sys.exit(2)
-        else:
+        if status != "OK":
             self.logger.info("Create destination folder %s" %
                              destination_folder)
             self._conn_destination.create(destination_folder)
             self._conn_destination.subscribe(destination_folder)
-            status, data = self._conn_destination.select(destination_folder)
+        status, data = self._conn_destination.select(destination_folder)
 
         # Look for mails
         self.logger.info("Looking for mail in %s" % source_folder)
@@ -174,15 +179,46 @@ class IMAP_Copy(object):
 
                 internaldate = flags_line[internaldate_start:internaldate_end]
 
-                self._conn_destination.append(
-                    destination_folder, flags, internaldate, message,
-                )
+                if self.datesub != None:
+                    if self.datesub in internaldate or self.datesub == 'ALL':
+                        if self.datesub == 'ALL':
+                            d = datetime.strptime(internaldate, '"%d-%b-%Y %H:%M:%S %z"')
+                            destfol = destination_folder + "." + str(d.year)
+                        else:
+                            destfol = destination_folder + "." + self.datesub
+                        # But destination may not exist yet
+                        # Connect to destination and open or create folder
+                        status, data = self._conn_destination.select(destfol)
+                        if status != "OK" and not self.create_folders:
+                            self.logger.error("Couldn't open subdestination folder %s" %
+                                              destfol)
+                            sys.exit(2)
+                        if status != "OK":
+                            self.logger.info("Create subdestination folder %s" %
+                                             destfol)
+                            self._conn_destination.create(destfol)
+                            self._conn_destination.subscribe(destfol)
+                        status, data = self._conn_destination.select(destfol)
+                    # Now we have a selected destination folder
+                else:
+                    destfol=destination_folder;
 
+                flags = flags.replace("\Recent", "")
+                flags = flags.replace("( ", "(")
+                flags = flags.replace(" )", ")")
+#                self.logger.info("Append with flags %s" %
+#                                 flags)
+#                self.logger.info("Try copy mail %d of %d (date=%s)" % (
+#                    progress_count, mail_count, internaldate))
+                self._conn_destination.append(
+                    destfol, flags, internaldate, message,
+                )
+                
                 copy_count += 1
                 message_sha1 = hashlib.sha1(message).hexdigest()
-
-                self.logger.info("Copy mail %d of %d (copy_count=%d, sha1(message)=%s)" % (
-                    progress_count, mail_count, copy_count, message_sha1))
+                    
+                self.logger.info("Copy mail %d of %d (date=%s count=%d, sha1=%s)" % (
+                    progress_count, mail_count, internaldate, copy_count, message_sha1))
 
                 if limit > 0 and copy_count >= limit:
                     self.logger.info("Copy limit %d reached (copy_count=%d)" % (
@@ -253,6 +289,9 @@ def main():
     parser.add_argument('folders', type=str, nargs='*',
                         help="list of folders, alternating between source folder and destination folder")
 
+    parser.add_argument('-d', '--datesub', dest='datesub',
+                        help="date sub string, e.g. 2017")
+
     parser.add_argument('-t', '--test', dest='test_connections',
                         action="store_true", default=False,
                         help="do not copy, only test connections to source and destination")
@@ -310,7 +349,7 @@ def main():
 
     imap_copy = IMAP_Copy(source, destination, folder_mapping, source_auth,
                           destination_auth, create_folders=args.create_folders,
-                          recurse=args.recurse, skip=args.skip, limit=args.limit)
+                          recurse=args.recurse, skip=args.skip, limit=args.limit, datesub=args.datesub)
 
     streamHandler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')

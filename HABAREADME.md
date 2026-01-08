@@ -26,4 +26,13 @@ python3 imapcopy.py -c \
 ```
 (must be absolute path to proxy)
 
+
+Command line options added
+--------------------------
+
+* --datesub [ yearnumber | ALL] 
+
+called with yearnumber all messages will end up in subfolder FOLDER.yearnumber. With "ALL" it will sort all messages into their appropriate year numbered sub folders
+
+
  
